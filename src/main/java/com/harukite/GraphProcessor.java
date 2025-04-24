@@ -22,12 +22,12 @@ public class GraphProcessor extends JFrame
     private int wordNum;
     private Map<String, Integer> wordCount;
     private Map<String, Map<String, Integer>> graph;
-    private Random random;
-    private Set<String> visitedEdges;
-    private List<String> walkPath;
+    private final Random random;
+    private final Set<String> visitedEdges;
+    private final List<String> walkPath;
     private volatile boolean walkStopped;
-    private volatile boolean idf; // 是否使用IDF加权
-    private boolean walkDelay; // 是否延迟游走
+    private boolean idf; // 是否使用IDF加权
+    private volatile boolean walkDelay; // 是否延迟游走
     private Thread walkThread; // 保存线程引用
 
     // UI组件
@@ -308,9 +308,7 @@ public class GraphProcessor extends JFrame
         walkStopped = false;
         walkThread = new Thread(() -> {
             String result = randomWalks();
-            SwingUtilities.invokeLater(() -> {
-                outputArea.append("随机游走路径: " + result + "\n");
-            });
+            SwingUtilities.invokeLater(() -> outputArea.append("随机游走路径: " + result + "\n"));
         });
         walkThread.start();
     }
@@ -558,7 +556,7 @@ public class GraphProcessor extends JFrame
         {
             findPaths(prev, start, previous, path, allPaths);
         }
-        path.remove(path.size() - 1);
+        path.removeLast();
     }
 
     public Double calPageRank(String word)
