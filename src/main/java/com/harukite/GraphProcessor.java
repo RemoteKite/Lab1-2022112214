@@ -11,10 +11,7 @@ import guru.nidi.graphviz.model.Node;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 import java.util.List;
 
@@ -22,12 +19,17 @@ import static guru.nidi.graphviz.model.Factory.*;
 
 public class GraphProcessor extends JFrame
 {
+    private int wordNum;
+    private Map<String, Integer> wordCount;
     private Map<String, Map<String, Integer>> graph;
     private Random random;
     private Set<String> visitedEdges;
     private List<String> walkPath;
     private Map<String, Double> pageRank;
-    private boolean walkStopped;
+    private volatile boolean walkStopped;
+    private volatile boolean idf; // 是否使用IDF加权
+    private boolean walkDelay; // 是否延迟游走
+    private Thread walkThread; // 保存线程引用
 
     // UI组件
     private JTextArea outputArea;
@@ -44,12 +46,16 @@ public class GraphProcessor extends JFrame
 
     public GraphProcessor()
     {
+        wordNum = 0;
+        wordCount = new HashMap<>();
         graph = new HashMap<>();
         pageRank = new HashMap<>();
         random = new Random();
         visitedEdges = new HashSet<>();
         walkPath = new ArrayList<>();
         walkStopped = true;
+        idf = false; // 默认不使用IDF加权
+        walkDelay = false; // 默认不延迟游走
 
         initializeUI();
     }
@@ -162,20 +168,30 @@ public class GraphProcessor extends JFrame
         JButton rankButton = new JButton("计算PageRank");
         rankButton.addActionListener(e -> calPageRank());
 
+        // IDF加权选项
+        JCheckBox idfCheckBox = new JCheckBox("使用IDF加权");
+        idfCheckBox.addActionListener(e -> idf = idfCheckBox.isSelected());
+
+        rankPanel.add(idfCheckBox, BorderLayout.EAST);
         rankPanel.add(new JLabel("目标单词:"), BorderLayout.NORTH);
         rankPanel.add(targetWordField, BorderLayout.CENTER);
         rankPanel.add(rankButton, BorderLayout.SOUTH);
 
         // 5. 随机游走
+        JPanel walkPanel = new JPanel(new BorderLayout());
+        JCheckBox delayCheckBox = new JCheckBox("延迟游走");
+        delayCheckBox.addActionListener(e -> walkDelay = delayCheckBox.isSelected());
+        walkPanel.add(delayCheckBox, BorderLayout.EAST);
         JButton walkButton = new JButton("随机游走");
         walkButton.addActionListener(e -> randomWalk());
+        walkPanel.add(walkButton, BorderLayout.CENTER);
 
         // 添加所有功能组件
         functionPanel.add(bridgePanel);
         functionPanel.add(newTextPanel);
         functionPanel.add(pathPanel);
         functionPanel.add(rankPanel);
-        functionPanel.add(walkButton);
+        functionPanel.add(walkPanel);
 
         // 6. 显示图形
         imageLabel = new JLabel();
@@ -281,19 +297,40 @@ public class GraphProcessor extends JFrame
 
     private void randomWalk()
     {
-        if (walkStopped == false)
+        if (!walkStopped && walkThread != null)
         {
+            // 中断正在运行的游走
             walkStopped = true;
-            outputArea.append("随机游走中断\n");
+            walkThread.interrupt(); // 发送中断信号
+            outputArea.append("随机游走已中断\n");
             return;
         }
-        String result = randomWalks();
-        outputArea.append("随机游走路径: " + result + "\n");
+
+        // 开始新的游走
+        walkStopped = false;
+        walkThread = new Thread(() -> {
+            String result = randomWalks();
+            SwingUtilities.invokeLater(() -> {
+                outputArea.append("随机游走路径: " + result + "\n");
+            });
+        });
+        walkThread.start();
     }
 
     public void buildGraph(String text)
     {
         String[] words = text.toLowerCase().split("[^a-zA-Z]+");
+        wordCount = new HashMap<>();
+        wordNum = 0;
+        for (String word : words)
+        {
+            if (!word.isEmpty())
+            {
+                ++wordNum;
+                graph.putIfAbsent(word, new HashMap<>());
+                wordCount.merge(word, 1, Integer::sum);
+            }
+        }
         for (int i = 0; i < words.length - 1; i++)
         {
             String current = words[i];
@@ -303,8 +340,6 @@ public class GraphProcessor extends JFrame
             {
                 continue;
             }
-
-            graph.putIfAbsent(current, new HashMap<>());
             graph.get(current).merge(next, 1, Integer::sum);
         }
     }
@@ -537,10 +572,29 @@ public class GraphProcessor extends JFrame
 
         // 初始化PageRank值
         double initialRank = 1.0 / graph.size();
+        double coefficient = 1.0;
+        if (idf)
+        {
+            double totalIdfValue = 0.0;
+            for (String each_word : wordCount.keySet())
+            {
+                double idfValue = Math.log((double) wordNum / (wordCount.get(each_word) + 1));
+                totalIdfValue += idfValue;
+            }
+            coefficient = 1.0 / totalIdfValue;
+        }
         Map<String, Double> currentRank = new HashMap<>();
         for (String node : graph.keySet())
         {
-            currentRank.put(node, initialRank);
+            if (idf)
+            {
+                double idfValue = Math.log((double) wordNum / (wordCount.get(node) + 1)) * coefficient;
+                currentRank.put(node, idfValue);
+            }
+            else
+            {
+                currentRank.put(node, initialRank);
+            }
         }
 
         // 迭代计算PageRank (10次迭代)
@@ -592,26 +646,77 @@ public class GraphProcessor extends JFrame
         walkPath.clear();
         visitedEdges.clear();
         walkStopped = false;
-
-        while (!walkStopped)
+        boolean passiveStop = true;
+        BufferedWriter writer = null;
+        try
         {
-            walkPath.add(currentNode);
-            List<String> neighbors = new ArrayList<>(graph.get(currentNode).keySet());
-            if (neighbors.isEmpty())
+            writer = new BufferedWriter(new FileWriter("walk_log.txt", true));
+            while (!walkStopped && !Thread.interrupted())
             {
-                break;
-            }
+                walkPath.add(currentNode);
+                //every time a word is added, put it into a file
+                writer.write(currentNode + " ");
+                writer.flush();
+                List<String> neighbors = new ArrayList<>(graph.get(currentNode).keySet());
+                if (neighbors.isEmpty())
+                {
+                    writer.write("[END-NO NEIGHBORS]\n");
+                    writer.flush();
+                    walkStopped = true;
+                    passiveStop = false; // 主动停止
+                    break;
+                }
 
-            String nextNode = neighbors.get(random.nextInt(neighbors.size()));
-            String edge = currentNode + "->" + nextNode;
-            if (visitedEdges.contains(edge))
-            {
-                walkStopped = true;
+                String nextNode = neighbors.get(random.nextInt(neighbors.size()));
+                String edge = currentNode + "->" + nextNode;
+                if (visitedEdges.contains(edge))
+                {
+                    writer.write("[END-CYCLE]\n");
+                    writer.flush();
+                    walkStopped = true;
+                    passiveStop = false; // 主动停止
+                }
+                else
+                {
+                    visitedEdges.add(edge);
+                    currentNode = nextNode;
+                }
+                if (walkDelay)
+                {
+                    Thread.sleep(300);
+                }
             }
-            else
+        }
+        catch (InterruptedException e)
+        {
+            try
             {
-                visitedEdges.add(edge);
-                currentNode = nextNode;
+                // 被中断时写入特殊标记
+                writer.write("[INTERRUPTED]\n");
+                writer.flush();
+                return "游走被中断：" + String.join(" -> ", walkPath);
+            }
+            catch (IOException ioException)
+            {
+                return "写入中断标记失败：" + ioException.getMessage();
+            }
+        }
+        catch (IOException e)
+        {
+            return "写入日志文件失败：" + e.getMessage();
+        }
+        finally
+        {
+            try
+            {
+                if (writer != null)
+                {
+                    writer.close();
+                }
+            }
+            catch (IOException e)
+            {
+                e.printStackTrace();
             }
         }
 
