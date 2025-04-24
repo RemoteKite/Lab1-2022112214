@@ -25,7 +25,6 @@ public class GraphProcessor extends JFrame
     private Random random;
     private Set<String> visitedEdges;
     private List<String> walkPath;
-    private Map<String, Double> pageRank;
     private volatile boolean walkStopped;
     private volatile boolean idf; // 是否使用IDF加权
     private boolean walkDelay; // 是否延迟游走
@@ -49,7 +48,6 @@ public class GraphProcessor extends JFrame
         wordNum = 0;
         wordCount = new HashMap<>();
         graph = new HashMap<>();
-        pageRank = new HashMap<>();
         random = new Random();
         visitedEdges = new HashSet<>();
         walkPath = new ArrayList<>();
@@ -631,7 +629,6 @@ public class GraphProcessor extends JFrame
             currentRank = nextRank;
         }
 
-        pageRank = currentRank;
         return currentRank.get(word);
     }
 
@@ -691,9 +688,12 @@ public class GraphProcessor extends JFrame
         {
             try
             {
-                // 被中断时写入特殊标记
-                writer.write("[INTERRUPTED]\n");
-                writer.flush();
+                if (passiveStop)
+                {
+                    // 被中断时写入特殊标记
+                    writer.write("[INTERRUPTED]\n");
+                    writer.flush();
+                }
                 return "游走被中断：" + String.join(" -> ", walkPath);
             }
             catch (IOException ioException)
