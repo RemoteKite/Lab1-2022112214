@@ -36,3 +36,7 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Program generated files ###
+walk_log.txt
+*.png
