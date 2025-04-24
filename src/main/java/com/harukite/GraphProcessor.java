@@ -49,7 +49,7 @@ public class GraphProcessor extends JFrame
         random = new Random();
         visitedEdges = new HashSet<>();
         walkPath = new ArrayList<>();
-        walkStopped = false;
+        walkStopped = true;
 
         initializeUI();
     }
@@ -99,7 +99,7 @@ public class GraphProcessor extends JFrame
         JPanel graphPanel = new JPanel(new BorderLayout());
         graphOutputField = new JTextField("graph.png");
         JButton generateGraphButton = new JButton("生成图形");
-        generateGraphButton.addActionListener(e -> saveGraphToFile(graphOutputField.getText()));
+        generateGraphButton.addActionListener(e -> showDirectedGraph(graphOutputField.getText()));
 
         graphPanel.add(new JLabel("图形输出文件:"), BorderLayout.WEST);
         graphPanel.add(graphOutputField, BorderLayout.CENTER);
@@ -249,6 +249,11 @@ public class GraphProcessor extends JFrame
 
     private void generateNewText()
     {
+        if (inputTextField.getText().isEmpty())
+        {
+            outputArea.append("请输入文本!\n");
+            return;
+        }
         String inputText = inputTextField.getText();
         String result = generateNewText(inputText);
         outputArea.append("生成的新文本: " + result + "\n");
@@ -256,6 +261,11 @@ public class GraphProcessor extends JFrame
 
     private void calcShortestPath()
     {
+        if (startWordField.getText().isEmpty())
+        {
+            outputArea.append("请填写起始单词!\n");
+            return;
+        }
         String word1 = startWordField.getText().toLowerCase();
         String word2 = endWordField.getText().toLowerCase();
         String result = calcShortestPath(word1, word2.isEmpty() ? null : word2);
@@ -271,6 +281,12 @@ public class GraphProcessor extends JFrame
 
     private void randomWalk()
     {
+        if (walkStopped == false)
+        {
+            walkStopped = true;
+            outputArea.append("随机游走中断\n");
+            return;
+        }
         String result = randomWalks();
         outputArea.append("随机游走路径: " + result + "\n");
     }
@@ -395,9 +411,8 @@ public class GraphProcessor extends JFrame
         {
             return "目标单词 \"" + word2 + "\" 不在图中!";
         }
-
         Map<String, Integer> distances = new HashMap<>();
-        Map<String, String> previous = new HashMap<>();
+        Map<String, List<String>> previous = new HashMap<>();
         PriorityQueue<String> queue = new PriorityQueue<>(Comparator.comparingInt(distances::get));
 
         // 初始化
@@ -418,7 +433,7 @@ public class GraphProcessor extends JFrame
         while (!queue.isEmpty())
         {
             String current = queue.poll();
-            if (distances.get(current) == Integer.MAX_VALUE)
+            if (distances.getOrDefault(current, Integer.MAX_VALUE) == Integer.MAX_VALUE)
             {
                 break;
             }
@@ -428,67 +443,89 @@ public class GraphProcessor extends JFrame
                 String next = neighbor.getKey();
                 int newDist = distances.get(current) + neighbor.getValue();
 
-                if (newDist < distances.get(next))
+                if (newDist < distances.getOrDefault(next, Integer.MAX_VALUE))
                 {
                     distances.put(next, newDist);
-                    previous.put(next, current);
+                    previous.put(next, new ArrayList<>(List.of(current)));
                     queue.remove(next);
                     queue.add(next);
+                }
+                else if (newDist == distances.get(next))
+                {
+                    previous.get(next).add(current);
                 }
             }
         }
 
-        // 构建结果
+        // 输出所有路径
         StringBuilder result = new StringBuilder();
         if (word2 == null)
         {
-            // 计算到所有节点的最短路径
             for (String node : graph.keySet())
             {
                 if (!node.equals(word1))
                 {
-                    result.append("从 \"").append(word1).append("\" 到 \"").append(node).append("\" 的最短路径: ");
-                    if (distances.get(node) == Integer.MAX_VALUE)
+                    List<List<String>> paths = new ArrayList<>();
+                    findPaths(node, word1, previous, new ArrayList<>(), paths);
+
+                    if (paths.isEmpty())
                     {
-                        result.append("不可达\n");
+                        result.append("从 ").append(word1).append(" 到 ").append(node).append(" 没有路径\n");
                     }
                     else
                     {
-                        result.append(getPath(word1, node, previous)).append(" (距离: ").append(distances.get(node)).append(")\n");
+                        result.append("从 ").append(word1).append(" 到 ").append(node).append(" 的所有最短路径:\n");
+                        for (List<String> path : paths)
+                        {
+                            result.append(String.join(" -> ", path)).append(" (距离: ").append(distances.get(node)).append(")\n");
+                        }
                     }
                 }
             }
         }
         else
         {
-            // 计算到特定节点的最短路径
-            if (distances.get(word2) == Integer.MAX_VALUE)
+            List<List<String>> allPaths = new ArrayList<>();
+            findPaths(word2, word1, previous, new ArrayList<>(), allPaths);
+            if (allPaths.isEmpty())
             {
-                result.append("\"").append(word1).append("\" 和 \"").append(word2).append("\" 之间没有路径!");
+                result.append("没有从 ").append(word1).append(" 到 ").append(word2).append(" 的路径。");
             }
             else
             {
-                result.append("最短路径: ").append(getPath(word1, word2, previous))
-                        .append(" (距离: ").append(distances.get(word2)).append(")");
+                result.append("从 ").append(word1).append(" 到 ").append(word2).append(" 的所有最短路径:\n");
+                for (List<String> path : allPaths)
+                {
+                    result.append(String.join(" -> ", path)).append(" (距离: ").append(distances.get(word2)).append(")\n");
+                }
             }
         }
 
         return result.toString();
     }
 
-    private String getPath(String start, String end, Map<String, String> previous)
+    private static void findPaths(String current, String start, Map<String, List<String>> previous,
+                                  List<String> path, List<List<String>> allPaths)
     {
-        LinkedList<String> path = new LinkedList<>();
-        String current = end;
-
-        while (current != null && !current.equals(start))
+        if (current.equals(start))
         {
-            path.addFirst(current);
-            current = previous.get(current);
+            List<String> fullPath = new ArrayList<>(path);
+            fullPath.add(start);
+            Collections.reverse(fullPath);
+            allPaths.add(fullPath);
+            return;
         }
-        path.addFirst(start);
+        if (!previous.containsKey(current))
+        {
+            return;
+        }
 
-        return String.join(" -> ", path);
+        path.add(current);
+        for (String prev : previous.get(current))
+        {
+            findPaths(prev, start, previous, path, allPaths);
+        }
+        path.remove(path.size() - 1);
     }
 
     public Double calPageRank(String word)
@@ -581,7 +618,7 @@ public class GraphProcessor extends JFrame
         return String.join(" -> ", walkPath);
     }
 
-    public void saveGraphToFile(String filename)
+    public void showDirectedGraph(String filename)
     {
         if (graph.isEmpty())
         {
