@@ -182,7 +182,7 @@ public class GraphProcessor extends JFrame
         walkPanel.add(delayCheckBox, BorderLayout.EAST);
         JButton walkButton = new JButton("随机游走");
         walkButton.addActionListener(e -> randomWalk());
-        walkPanel.add(walkButton, BorderLayout.CENTER);
+        walkPanel.add(walkButton, BorderLayout.SOUTH);
 
         // 添加所有功能组件
         functionPanel.add(bridgePanel);
