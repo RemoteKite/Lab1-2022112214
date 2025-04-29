@@ -7,10 +7,14 @@ import guru.nidi.graphviz.engine.Format;
 import guru.nidi.graphviz.engine.Graphviz;
 import guru.nidi.graphviz.model.MutableGraph;
 import guru.nidi.graphviz.model.Node;
+import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
+import org.apache.batik.swing.JSVGCanvas;
+import org.apache.batik.util.XMLResourceDescriptor;
+import org.w3c.dom.Document;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.image.BufferedImage;
+import java.awt.event.MouseEvent;
 import java.io.*;
 import java.util.*;
 import java.util.List;
@@ -29,6 +33,7 @@ public class GraphProcessor extends JFrame
     private boolean idf; // 是否使用IDF加权
     private volatile boolean walkDelay; // 是否延迟游走
     private Thread walkThread; // 保存线程引用
+    private boolean showPathOnGraph; // 是否在图上显示路径
 
     // UI组件
     private JTextArea outputArea;
@@ -40,8 +45,7 @@ public class GraphProcessor extends JFrame
     private JTextField endWordField;
     private JTextField targetWordField;
     private JTextField graphOutputField;
-    private JLabel imageLabel;
-    private JScrollPane imagePane;
+    private JSVGCanvas svgCanvas;
 
     public GraphProcessor()
     {
@@ -54,6 +58,7 @@ public class GraphProcessor extends JFrame
         walkStopped = true;
         idf = false; // 默认不使用IDF加权
         walkDelay = false; // 默认不延迟游走
+        showPathOnGraph = false; // 默认不在图上显示路径
 
         initializeUI();
     }
@@ -112,9 +117,6 @@ public class GraphProcessor extends JFrame
         topPanel.add(filePanel);
         topPanel.add(graphPanel);
 
-        // 中间面板 - 功能区和输出区
-        JPanel centerPanel = new JPanel(new GridLayout(1, 2));
-
         // 功能区
         JPanel functionPanel = new JPanel(new GridLayout(6, 1));
 
@@ -157,7 +159,11 @@ public class GraphProcessor extends JFrame
         pathInputPanel.add(new JLabel("目标单词:"));
         pathInputPanel.add(endWordField);
 
+        JCheckBox showPathCheckBox = new JCheckBox("在图上显示路径");
+        showPathCheckBox.addActionListener(e -> showPathOnGraph = showPathCheckBox.isSelected());
+
         pathPanel.add(pathInputPanel, BorderLayout.CENTER);
+        pathPanel.add(showPathCheckBox, BorderLayout.EAST);
         pathPanel.add(pathButton, BorderLayout.SOUTH);
 
         // 4. PageRank
@@ -192,21 +198,41 @@ public class GraphProcessor extends JFrame
         functionPanel.add(walkPanel);
 
         // 6. 显示图形
-        imageLabel = new JLabel();
-        imagePane = new JScrollPane(imageLabel);
+        svgCanvas = new JSVGCanvas()
+        {
+            @Override
+            public String getToolTipText(MouseEvent evt)
+            {
+                return null; // 彻底禁用所有悬浮提示
+            }
+
+            @Override
+            public void paintComponent(Graphics g) //重写paintComponent方法
+            {
+                if (g instanceof Graphics2D g2d)
+                {
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                }
+                super.paintComponent(g);
+            }
+        };
+        JScrollPane imagePane = new JScrollPane(svgCanvas);
 
         // 输出区
         outputArea = new JTextArea();
         outputArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(outputArea);
+        //clear outputArea
+        JButton clearButton = new JButton("清空输出区");
+        clearButton.addActionListener(e -> outputArea.setText(""));
+        JPanel outputPanel = new JPanel(new BorderLayout());
+        outputPanel.add(scrollPane, BorderLayout.CENTER);
+        outputPanel.add(clearButton, BorderLayout.SOUTH);
 
-        JPanel leftPanel = new JPanel(new GridLayout(2, 1));
 
-        leftPanel.add(imagePane);
-        leftPanel.add(scrollPane);
-
-        centerPanel.add(functionPanel);
-        centerPanel.add(leftPanel);
+        JSplitPane leftPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, outputPanel, imagePane);
+        JSplitPane centerPanel = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, functionPanel, leftPanel);
 
         // 添加到主窗口
         add(topPanel, BorderLayout.NORTH);
@@ -407,6 +433,7 @@ public class GraphProcessor extends JFrame
     public String generateNewText(String inputText)
     {
         String[] words = inputText.toLowerCase().split("[^a-zA-Z]+");
+        String[] original_words = inputText.split("[^a-zA-Z]+"); //没有小写的原始单词
         StringBuilder newText = new StringBuilder();
 
         for (int i = 0; i < words.length - 1; i++)
@@ -414,7 +441,7 @@ public class GraphProcessor extends JFrame
             String current = words[i];
             String next = words[i + 1];
 
-            newText.append(current).append(" ");
+            newText.append(original_words[i]).append(" ");
 
             if (graph.containsKey(current) && graph.containsKey(next))
             {
@@ -427,7 +454,7 @@ public class GraphProcessor extends JFrame
                 }
             }
         }
-        newText.append(words[words.length - 1]);
+        newText.append(original_words[words.length - 1]);
 
         return newText.toString();
     }
@@ -442,20 +469,20 @@ public class GraphProcessor extends JFrame
         {
             return "目标单词 \"" + word2 + "\" 不在图中!";
         }
-        Map<String, Integer> distances = new HashMap<>();
-        Map<String, List<String>> previous = new HashMap<>();
-        PriorityQueue<String> queue = new PriorityQueue<>(Comparator.comparingInt(distances::get));
+        Map<String, Integer> distances = new HashMap<>(); // 存储最短距离
+        Map<String, List<String>> previous = new HashMap<>(); // 存储前驱节点
+        PriorityQueue<String> queue = new PriorityQueue<>(Comparator.comparingInt(distances::get)); // 优先队列
 
         // 初始化
         for (String node : graph.keySet())
         {
             if (node.equals(word1))
             {
-                distances.put(node, 0);
+                distances.put(node, 0); // 起始节点距离为0
             }
             else
             {
-                distances.put(node, Integer.MAX_VALUE);
+                distances.put(node, Integer.MAX_VALUE); // 其他节点距离为无穷大
             }
             queue.add(node);
         }
@@ -490,6 +517,7 @@ public class GraphProcessor extends JFrame
 
         // 输出所有路径
         StringBuilder result = new StringBuilder();
+        List<List<String>> allPaths = new ArrayList<>();
         if (word2 == null)
         {
             for (String node : graph.keySet())
@@ -498,16 +526,17 @@ public class GraphProcessor extends JFrame
                 {
                     List<List<String>> paths = new ArrayList<>();
                     findPaths(node, word1, previous, new ArrayList<>(), paths);
-
                     if (paths.isEmpty())
                     {
                         result.append("从 ").append(word1).append(" 到 ").append(node).append(" 没有路径\n");
                     }
                     else
                     {
+                        allPaths.addAll(paths); //添加进总表
                         result.append("从 ").append(word1).append(" 到 ").append(node).append(" 的所有最短路径:\n");
                         for (List<String> path : paths)
                         {
+                            result.append("Path ").append(allPaths.indexOf(path) + 1).append(": ");
                             result.append(String.join(" -> ", path)).append(" (距离: ").append(distances.get(node)).append(")\n");
                         }
                     }
@@ -516,7 +545,6 @@ public class GraphProcessor extends JFrame
         }
         else
         {
-            List<List<String>> allPaths = new ArrayList<>();
             findPaths(word2, word1, previous, new ArrayList<>(), allPaths);
             if (allPaths.isEmpty())
             {
@@ -527,11 +555,30 @@ public class GraphProcessor extends JFrame
                 result.append("从 ").append(word1).append(" 到 ").append(word2).append(" 的所有最短路径:\n");
                 for (List<String> path : allPaths)
                 {
+                    result.append("Path ").append(allPaths.indexOf(path) + 1).append(": ");
                     result.append(String.join(" -> ", path)).append(" (距离: ").append(distances.get(word2)).append(")\n");
                 }
             }
         }
+        if (showPathOnGraph)
+        {
+            // 在图上显示路径
+            MutableGraph g = genGraph();
+            List<guru.nidi.graphviz.attribute.Color> colors = ColorChooser(allPaths.size());
+            for (int i = 0; i < allPaths.size(); i++)
+            {
+                List<String> path = allPaths.get(i);
+                for (int j = 0; j < path.size() - 1; j++)
+                {
+                    String from = path.get(j);
+                    String to = path.get(j + 1);
+                    // 添加边并设置颜色 字的颜色和边的颜色相同
+                    g.add(node(from).link(to(node(to)).with(Label.of("(" + distances.get(path.getLast()) + ")" + "Path " + (i + 1)), colors.get(i))));
 
+                }
+            }
+            displayGraph(g);
+        }
         return result.toString();
     }
 
@@ -730,54 +777,84 @@ public class GraphProcessor extends JFrame
         }
         try
         {
-            // 使用Graphviz库创建图形
-            MutableGraph g = mutGraph("文本有向图").setDirected(true);
+            MutableGraph g = genGraph();
 
-            // 添加所有节点
-            Map<String, Node> nodes = new HashMap<>();
-            for (String nodeName : graph.keySet())
-            {
-                nodes.put(nodeName, node(nodeName).with(Shape.ELLIPSE));
-            }
-
-            // 添加所有边
-            for (Map.Entry<String, Map<String, Integer>> entry : graph.entrySet())
-            {
-                String from = entry.getKey();
-                for (Map.Entry<String, Integer> edge : entry.getValue().entrySet())
-                {
-                    String to = edge.getKey();
-                    int weight = edge.getValue();
-                    nodes.putIfAbsent(to, node(to).with(Shape.ELLIPSE));
-                    g.add(nodes.get(from).link(to(nodes.get(to)).with(Label.of(String.valueOf(weight)))));
-                }
-            }
-
-            // 渲染并保存图形
+            //渲染并保存图形
             Graphviz.fromGraph(g)
                     .engine(Engine.DOT)
-                    .width(1200)
                     .render(Format.PNG)
                     .toFile(new File(filename));
 
             outputArea.append("图形文件已保存为 " + filename + "\n");
-
-            // 显示图形到JLabel
-            //获取JLabel的长宽
-            Dimension size = imagePane.getSize();
-            //在内存中调用Graphviz重绘图片
-            BufferedImage image = Graphviz.fromGraph(g)
-                    .engine(Engine.DOT)
-                    .width(size.width)
-                    .render(Format.PNG)
-                    .toImage();
-            //将图片显示到JLabel上
-            imageLabel.setIcon(new ImageIcon(image));
-            imageLabel.repaint();
+            displayGraph(g);
         }
         catch (Exception e)
         {
             outputArea.append("生成图形文件失败: " + e.getMessage() + "\n");
         }
+    }
+
+    public void displayGraph(MutableGraph g)
+    {
+        //在内存中调用Graphviz重绘图片
+        String svgContent = Graphviz.fromGraph(g)
+                .engine(Engine.DOT)
+                .render(Format.SVG)
+                .toString();
+        //将图片显示到canvas上
+        try
+        {
+            String parser = XMLResourceDescriptor.getXMLParserClassName();
+            SAXSVGDocumentFactory factory = new SAXSVGDocumentFactory(parser);
+            Reader stringReader = new StringReader(svgContent);
+            Document document = factory.createDocument(null, stringReader);
+            svgCanvas.setDocument(document);
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+    }
+
+    public List<guru.nidi.graphviz.attribute.Color> ColorChooser(int numColors)
+    {
+        float saturation = 0.7f;  // 色彩饱和度 (0.0 - 1.0)
+        float brightness = 0.9f;  // 明亮度 (0.0 - 1.0)
+
+        List<guru.nidi.graphviz.attribute.Color> colors = new ArrayList<>();
+        for (int i = 0; i < numColors; i++)
+        {
+            float hue = (float) i / numColors;  // 均匀分布在色相环
+            Color color = Color.getHSBColor(hue, saturation, brightness);
+            colors.add(guru.nidi.graphviz.attribute.Color.rgb(color.getRed(), color.getGreen(), color.getBlue()));
+        }
+        return colors;
+    }
+
+    public MutableGraph genGraph()
+    {
+        // 使用Graphviz库创建图形
+        MutableGraph g = mutGraph("文本有向图").setDirected(true);
+
+        // 添加所有节点
+        Map<String, Node> nodes = new HashMap<>();
+        for (String nodeName : graph.keySet())
+        {
+            nodes.put(nodeName, node(nodeName).with(Shape.ELLIPSE));
+        }
+
+        // 添加所有边
+        for (Map.Entry<String, Map<String, Integer>> entry : graph.entrySet())
+        {
+            String from = entry.getKey();
+            for (Map.Entry<String, Integer> edge : entry.getValue().entrySet())
+            {
+                String to = edge.getKey();
+                int weight = edge.getValue();
+                nodes.putIfAbsent(to, node(to).with(Shape.ELLIPSE));
+                g.add(nodes.get(from).link(to(nodes.get(to)).with(Label.of(String.valueOf(weight)))));
+            }
+        }
+        return g;
     }
 }
