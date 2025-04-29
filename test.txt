@@ -1,3 +1,3 @@
 test file
 changed after commit.
-merged changes from R5 and R4
+merged changes from R5 and R4 then R7
