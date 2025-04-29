@@ -373,7 +373,7 @@ public class GraphProcessor extends JFrame
 
         for (String neighbor : word1Neighbors.keySet())
         {
-            if (graph.containsKey(neighbor))
+            if (graph.containsKey(neighbor)) //这一判断其实已经没什么必要了，因为在buildGraph中已经保证每个单词都在graph中
             {
                 Map<String, Integer> neighborNeighbors = graph.get(neighbor);
                 if (neighborNeighbors.containsKey(word2))
@@ -434,6 +434,10 @@ public class GraphProcessor extends JFrame
     {
         String[] words = inputText.toLowerCase().split("[^a-zA-Z]+");
         String[] original_words = inputText.split("[^a-zA-Z]+"); //没有小写的原始单词
+        if (words.length < 1)
+        {
+            return "输入文本似乎不包含任何单词!";
+        }
         StringBuilder newText = new StringBuilder();
 
         for (int i = 0; i < words.length - 1; i++)
@@ -624,7 +628,7 @@ public class GraphProcessor extends JFrame
                 double idfValue = Math.log((double) wordNum / (wordCount.get(each_word) + 1));
                 totalIdfValue += idfValue;
             }
-            coefficient = 1.0 / totalIdfValue;
+            coefficient = 1.0 / totalIdfValue; //归一化
         }
         Map<String, Double> currentRank = new HashMap<>();
         for (String node : graph.keySet())
@@ -673,7 +677,13 @@ public class GraphProcessor extends JFrame
 
             currentRank = nextRank;
         }
-
+        //Print sorted data. FOR DEBUG
+        //List<Map.Entry<String, Double>> sortedRank = new ArrayList<>(currentRank.entrySet());
+        //sortedRank.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
+        //for (Map.Entry<String, Double> entry : sortedRank)
+        //{
+        //    System.out.printf("%-15s : %.4f%n", entry.getKey(), entry.getValue());
+        //}
         return currentRank.get(word);
     }
 

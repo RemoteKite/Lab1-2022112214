@@ -40,3 +40,4 @@ build/
 ### Program generated files ###
 walk_log.txt
 *.png
+*.log
