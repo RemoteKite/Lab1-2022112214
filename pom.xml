@@ -6,7 +6,8 @@
 
     <groupId>com.harukite</groupId>
     <artifactId>Lab1</artifactId>
-    <version>1.0-R5</version>
+    <version>1.0-R5-R4</version>
+
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
