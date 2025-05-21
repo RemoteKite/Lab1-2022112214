@@ -101,7 +101,7 @@ public class GraphProcessor extends JFrame {
 
   @SuppressFBWarnings(
       value = "PATH_TRAVERSAL_IN",
-      justification = "BY DESIGN: The file path is provided by the user through a file chooser dialog."
+      justification = "BY DESIGN: The file path is provided through a file chooser dialog."
   )
   private static String readFile(String filePath) throws IOException {
     StringBuilder content = new StringBuilder();
