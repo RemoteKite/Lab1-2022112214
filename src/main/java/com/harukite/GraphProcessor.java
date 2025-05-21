@@ -4,6 +4,7 @@ import static guru.nidi.graphviz.model.Factory.mutGraph;
 import static guru.nidi.graphviz.model.Factory.node;
 import static guru.nidi.graphviz.model.Factory.to;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import guru.nidi.graphviz.attribute.Label;
 import guru.nidi.graphviz.attribute.Shape;
 import guru.nidi.graphviz.engine.Engine;
@@ -29,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -38,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.PriorityQueue;
-import java.util.Random;
 import java.util.Set;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -54,6 +55,7 @@ import javax.swing.SwingUtilities;
 import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
 import org.apache.batik.swing.JSVGCanvas;
 import org.apache.batik.util.XMLResourceDescriptor;
+import org.apache.commons.io.FilenameUtils;
 import org.w3c.dom.Document;
 
 public class GraphProcessor extends JFrame {
@@ -61,7 +63,7 @@ public class GraphProcessor extends JFrame {
   private int wordNum;
   private Map<String, Integer> wordCount;
   private Map<String, Map<String, Integer>> graph;
-  private final Random random;
+  private final SecureRandom random;
   private final Set<String> visitedEdges;
   private final List<String> walkPath;
   private volatile boolean walkStopped;
@@ -86,7 +88,7 @@ public class GraphProcessor extends JFrame {
     wordNum = 0;
     wordCount = new HashMap<>();
     graph = new HashMap<>();
-    random = new Random();
+    random = new SecureRandom();
     visitedEdges = new HashSet<>();
     walkPath = new ArrayList<>();
     walkStopped = true;
@@ -97,9 +99,13 @@ public class GraphProcessor extends JFrame {
     initializeUi();
   }
 
+  @SuppressFBWarnings(
+      value = "PATH_TRAVERSAL_IN",
+      justification = "BY DESIGN: The file path is provided by the user through a file chooser dialog."
+  )
   private static String readFile(String filePath) throws IOException {
     StringBuilder content = new StringBuilder();
-    Path fp = Paths.get(filePath).normalize();
+    Path fp = Paths.get(filePath);
     BufferedReader reader = Files.newBufferedReader(fp, StandardCharsets.UTF_8);
     String line;
     while ((line = reader.readLine()) != null) {
@@ -120,6 +126,8 @@ public class GraphProcessor extends JFrame {
     setLayout(new BorderLayout());
 
     filePathField = new JTextField();
+    // if debug is needed , change this to true
+    filePathField.setEditable(false);
     JButton browseButton = new JButton("浏览");
     browseButton.addActionListener(e -> browseFile());
     JButton loadButton = new JButton("加载文件");
@@ -719,7 +727,7 @@ public class GraphProcessor extends JFrame {
       Graphviz.fromGraph(g)
           .engine(Engine.DOT)
           .render(Format.PNG)
-          .toFile(new File(filename));
+          .toFile(new File(FilenameUtils.getName(filename)));
 
       outputArea.append("图形文件已保存为 " + filename + "\n");
       displayGraph(g);
