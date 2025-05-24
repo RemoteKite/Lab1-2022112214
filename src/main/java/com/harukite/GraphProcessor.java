@@ -58,6 +58,12 @@ import org.apache.batik.util.XMLResourceDescriptor;
 import org.apache.commons.io.FilenameUtils;
 import org.w3c.dom.Document;
 
+/**
+ * 文本图处理器类，负责构建和操作基于词语关系的图结构，并提供图形用户界面（GUI）交互。
+ *
+ * <p>该类继承自 {@link JFrame}，集成了图构建、词频统计、游走算法、
+ * 以及路径可视化等功能，适用于处理自然语言文本中的词图分析。.
+ */
 public class GraphProcessor extends JFrame {
 
   private int wordNum;
@@ -84,6 +90,12 @@ public class GraphProcessor extends JFrame {
   private JTextField graphOutputField;
   private JSVGCanvas svgCanvas;
 
+  /**
+   * 构造方法，初始化图处理器所需的成员变量并构建图形用户界面。
+   *
+   * <p>该方法设置默认参数，例如是否使用 IDF 加权、是否延迟游走等，
+   * 并调用 {@code initializeUi()} 方法加载主界面。.
+   */
   public GraphProcessor() {
     wordNum = 0;
     wordCount = new HashMap<>();
@@ -99,6 +111,15 @@ public class GraphProcessor extends JFrame {
     initializeUi();
   }
 
+  /**
+   * 读取指定路径的文本文件内容。
+   *
+   * <p>该方法以 UTF-8 编码按行读取文件，并将每行内容以空格分隔拼接为一个字符串返回。.
+   *
+   * @param filePath 要读取的文件路径，不能为空
+   * @return 文件内容拼接后的字符串
+   * @throws IOException 如果文件读取过程中发生 I/O 错误
+   */
   @SuppressFBWarnings(
       value = "PATH_TRAVERSAL_IN",
       justification = "BY DESIGN: The file path is provided through a file chooser dialog."
@@ -115,6 +136,14 @@ public class GraphProcessor extends JFrame {
     return content.toString();
   }
 
+  /**
+   * 应用程序的入口点。
+   *
+   * <p>该方法使用 {@link javax.swing.SwingUtilities#invokeLater(Runnable)}
+   * 在事件调度线程（EDT）上启动图形界面。.
+   *
+   * @param args 命令行参数（当前未使用）
+   */
   public static void main(String[] args) {
     SwingUtilities.invokeLater(GraphProcessor::new);
   }
@@ -356,6 +385,14 @@ public class GraphProcessor extends JFrame {
     walkThread.start();
   }
 
+  /**
+   * 构建词图结构。
+   *
+   * <p>该方法会将输入文本中的英文单词按顺序提取出来，构建词之间的有向图结构，
+   * 统计每个单词的出现次数，并计算总词数。图中每个边的权重表示相邻词对出现的次数。.
+   *
+   * @param text 原始文本内容，将被统一转换为小写并按非字母字符进行分词
+   */
   public void buildGraph(String text) {
     String[] words = text.toLowerCase().split("[^a-zA-Z]+");
     wordCount = new HashMap<>();
@@ -378,6 +415,17 @@ public class GraphProcessor extends JFrame {
     }
   }
 
+  /**
+   * 查找两个单词之间的桥接词（bridge words）。
+   *
+   * <p>桥接词定义为：在图中，若存在一条从 {@code word1} 到某个词，再到 {@code word2} 的路径，
+   * 则该中间词即为桥接词。例如，若存在路径 word1 → bridge → word2，则 bridge 是桥接词。.
+   *
+   * @param word1 起始单词
+   * @param word2 目标单词
+   * @return 所有桥接词组成的集合；如果没有桥接词，则返回空集
+   * @throws NullPointerException 如果 {@code word1} 在图中不存在
+   */
   public Set<String> bridgeWords(String word1, String word2) {
     Set<String> bridges = new HashSet<>();
     Map<String, Integer> word1Neighbors = graph.get(word1);
@@ -394,6 +442,16 @@ public class GraphProcessor extends JFrame {
     return bridges;
   }
 
+  /**
+   * 查询两个单词之间的桥接词，并返回格式化的结果字符串。
+   *
+   * <p>如果任一单词不在词图中，返回提示信息。
+   * 如果存在桥接词，则返回桥接词列表的自然语言描述；否则返回无桥接词的提示。.
+   *
+   * @param word1 起始单词
+   * @param word2 目标单词
+   * @return 包含查询结果的字符串，便于直接显示给用户
+   */
   public String queryBridgeWords(String word1, String word2) {
     if (!graph.containsKey(word1) || !graph.containsKey(word2)) {
       return "No \"" + word1 + "\" or \"" + word2 + "\" in the graph!";
@@ -428,6 +486,15 @@ public class GraphProcessor extends JFrame {
     }
   }
 
+  /**
+   * 基于桥接词生成新的文本。
+   *
+   * <p>该方法会分析输入文本中的相邻单词，尝试在它们之间插入桥接词（如果存在）。
+   * 生成的文本保持原单词的大小写和顺序，桥接词则统一小写插入。.
+   *
+   * @param inputText 原始输入文本，可以包含大小写和非字母字符
+   * @return 插入桥接词后的新文本；如果输入不含有效单词，则返回提示信息
+   */
   public String generateNewText(String inputText) {
     String[] words = inputText.toLowerCase().split("[^a-zA-Z]+");
     String[] originalWords = inputText.split("[^a-zA-Z]+"); //没有小写的原始单词
@@ -456,6 +523,19 @@ public class GraphProcessor extends JFrame {
     return newText.toString();
   }
 
+  /**
+   * 计算指定起始单词到目标单词（或所有节点）的最短路径，并返回详细路径描述。
+   *
+   * <p>该方法使用 Dijkstra 算法在词图中计算最短路径。若 {@code word2} 为空，
+   * 则计算起始单词到图中所有其他单词的最短路径并输出；否则只计算起始单词到目标单词的路径。
+   *
+   * <p>当 {@code showPathOnGraph} 标志为 {@code true} 时，将使用图形界面显示所有最短路径，
+   * 路径上的边和节点会被不同颜色高亮。.
+   *
+   * @param word1 起始单词，必须存在于词图中
+   * @param word2 目标单词，若为 {@code null} 则计算所有路径
+   * @return 包含最短路径信息的字符串描述，如果起始或目标单词不存在，则返回错误提示
+   */
   public String calcShortestPath(String word1, String word2) {
     if (!graph.containsKey(word1)) {
       return "起始单词 \"" + word1 + "\" 不在图中!";
@@ -578,6 +658,18 @@ public class GraphProcessor extends JFrame {
     path.removeLast();
   }
 
+  /**
+   * 计算指定单词的 PageRank 值，基于词图结构和可选的 IDF 加权。
+   *
+   * <p>PageRank 迭代次数固定为 10 次。
+   * <br>当 {@code idf} 标志为 {@code true} 时，初始权重基于单词的逆文档频率（IDF）进行归一化，
+   * 否则所有单词初始权重均等。
+   *
+   * <p>算法考虑悬挂节点（无出边节点）对 PageRank 的贡献，并采用阻尼因子 0.85。.
+   *
+   * @param word 需要计算 PageRank 的单词
+   * @return 该单词的 PageRank 值，若单词不在词图中则返回 0.0
+   */
   public Double calPageRank(String word) {
     if (!graph.containsKey(word)) {
       return 0.0;
@@ -642,6 +734,19 @@ public class GraphProcessor extends JFrame {
     return currentRank.get(word);
   }
 
+  /**
+   * 在词图上执行随机游走，沿着边随机访问相邻节点，直到游走停止条件触发。
+   *
+   * <p>游走从图中随机选取一个起始节点开始，依次随机选择当前节点的一个邻居作为下一个节点，
+   * 并记录路径和访问过的边。若遇到无邻居的节点或访问过的边（形成环路），则停止游走。
+   *
+   * <p>游走过程会实时将访问的节点写入名为 {@code walk_log.txt} 的日志文件，若遇异常会返回错误信息。
+   * 支持在游走过程中通过中断线程主动停止，且会将中断信息写入日志。
+   *
+   * <p>当 {@code walkDelay} 为 {@code true} 时，游走每步之间会暂停300毫秒，便于可视化等用途。.
+   *
+   * @return 返回游走路径，节点间用 " -> " 连接；异常或停止时返回相应提示信息。
+   */
   public String randomWalks() {
     if (graph.isEmpty()) {
       return "图为空，无法进行随机游走！";
@@ -715,6 +820,18 @@ public class GraphProcessor extends JFrame {
     return String.join(" -> ", walkPath);
   }
 
+  /**
+   * 根据当前的词图数据生成有向图的可视化图形文件，并在界面中显示图形。
+   *
+   * <p>方法首先判断图是否为空，若为空则在输出区域提示无法生成图形文件。
+   * 否则调用 {@link #genGraph()} 生成可变图对象， 并通过 Graphviz 的 DOT 引擎渲染为 PNG 格式图像文件，文件名取自传入参数
+   * {@code filename} 的文件名部分。
+   *
+   * <p>生成成功后，会在文本输出区域打印提示信息，并调用 {@link #displayGraph(MutableGraph)} 显示生成的图形。
+   * 如果生成过程抛出异常，则会捕获并在输出区域显示错误信息。.
+   *
+   * @param filename 指定生成图形文件的路径或文件名（仅文件名部分被使用）
+   */
   public void showDirectedGraph(String filename) {
     if (graph.isEmpty()) {
       outputArea.append("图为空，无法生成图形文件！\n");
@@ -736,6 +853,20 @@ public class GraphProcessor extends JFrame {
     }
   }
 
+  /**
+   * 将给定的图对象渲染为 SVG 格式，并显示在界面上的 SVG 画布组件中。
+   *
+   * <p>具体步骤包括：
+   * <ul>
+   *   <li>使用 Graphviz 的 DOT 引擎，将传入的 {@link MutableGraph} 对象渲染成 SVG 格式的字符串。</li>
+   *   <li>通过 Apache Batik 的 {@link SAXSVGDocumentFactory} 解析 SVG 字符串，生成可显示的 SVG 文档对象。</li>
+   *   <li>将解析后的 SVG 文档设置到界面中的 {@code svgCanvas} 组件，实现图形的可视化显示。</li>
+   * </ul>
+   *
+   * <p>如果渲染或解析过程中发生异常，会捕获并打印堆栈跟踪，避免程序崩溃。.
+   *
+   * @param g 要显示的图形对象，必须是可变图类型 {@link MutableGraph}。
+   */
   public void displayGraph(MutableGraph g) {
     //在内存中调用Graphviz重绘图片
     String svgContent = Graphviz.fromGraph(g)
@@ -754,6 +885,14 @@ public class GraphProcessor extends JFrame {
     }
   }
 
+  /**
+   * 生成一组颜色列表，用于图中不同路径的区分显示。
+   *
+   * <p>颜色均匀分布在色相环上，保持固定的饱和度和亮度，确保颜色鲜艳且易于辨识。.
+   *
+   * @param numColors 需要生成的颜色数量
+   * @return 按照输入数量生成的颜色列表，类型为 {@link guru.nidi.graphviz.attribute.Color}
+   */
   public List<guru.nidi.graphviz.attribute.Color> colorChooser(int numColors) {
     float saturation = 0.7f;  // 色彩饱和度 (0.0 - 1.0)
     float brightness = 0.9f;  // 明亮度 (0.0 - 1.0)
@@ -768,6 +907,18 @@ public class GraphProcessor extends JFrame {
     return colors;
   }
 
+  /**
+   * 生成当前文本图的有向图表示，使用 Graphviz 的 MutableGraph 类型。
+   *
+   * <p>该方法会：
+   * <ul>
+   *   <li>创建一个有向图对象，命名为“文本有向图”。</li>
+   *   <li>将图中所有单词作为节点添加进去，节点形状为椭圆。</li>
+   *   <li>将所有单词之间的关系（边）添加到图中，边上标注权重（出现次数）。</li>
+   * </ul>.
+   *
+   * @return 构建好的可变有向图对象，方便后续渲染和展示
+   */
   public MutableGraph genGraph() {
     // 使用Graphviz库创建图形
     MutableGraph g = mutGraph("文本有向图").setDirected(true);
