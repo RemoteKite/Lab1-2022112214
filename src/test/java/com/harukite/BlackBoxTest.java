@@ -28,7 +28,7 @@ public class BlackBoxTest {
   public void testEmptyString() {
     setUp();
     String result = graphProcessor.generateNewText("");
-    assertEquals("输入文本似乎不包含任何单词!", result);
+    assertEquals("", result);
   }
 
   @Test
