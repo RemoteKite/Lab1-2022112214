@@ -490,10 +490,10 @@ public class GraphProcessor extends JFrame {
    * 基于桥接词生成新的文本。
    *
    * <p>该方法会分析输入文本中的相邻单词，尝试在它们之间插入桥接词（如果存在）。
-   * 生成的文本保持原单词的大小写和顺序，桥接词则统一小写插入。.
+   * 生成的文本保持原单词的大小写和顺序，桥接词则统一小写插入（如果存在多个桥接词，则随机选取一个插入）。.
    *
-   * @param inputText 原始输入文本，可以包含大小写和非字母字符
-   * @return 插入桥接词后的新文本；如果输入不含有效单词，则返回提示信息
+   * @param inputText 原始输入文本，可以包含大小写和非字母字符，也可以是空字符串
+   * @return 插入桥接词后的新文本；如果输入非空且不含有效单词，则返回提示信息
    */
   public String generateNewText(String inputText) {
     String[] words = inputText.toLowerCase().split("[^a-zA-Z]+");
