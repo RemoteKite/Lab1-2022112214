@@ -1,0 +1,32 @@
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <CssCodeStyleSettings>
+      <option name="BRACE_PLACEMENT" value="1" />
+    </CssCodeStyleSettings>
+    <JSCodeStyleSettings version="0">
+      <option name="FUNCTION_EXPRESSION_BRACE_STYLE" value="2" />
+    </JSCodeStyleSettings>
+    <ScssCodeStyleSettings>
+      <option name="BRACE_PLACEMENT" value="1" />
+    </ScssCodeStyleSettings>
+    <VueCodeStyleSettings>
+      <option name="UNIFORM_INDENT" value="false" />
+    </VueCodeStyleSettings>
+    <codeStyleSettings language="JAVA">
+      <option name="ELSE_ON_NEW_LINE" value="true" />
+      <option name="CATCH_ON_NEW_LINE" value="true" />
+      <option name="FINALLY_ON_NEW_LINE" value="true" />
+      <option name="IF_BRACE_FORCE" value="3" />
+      <indentOptions>
+        <option name="CONTINUATION_INDENT_SIZE" value="10" />
+      </indentOptions>
+    </codeStyleSettings>
+    <codeStyleSettings language="JavaScript">
+      <option name="BRACE_STYLE" value="2" />
+      <option name="CLASS_BRACE_STYLE" value="2" />
+      <option name="METHOD_BRACE_STYLE" value="2" />
+      <option name="ELSE_ON_NEW_LINE" value="true" />
+      <option name="IF_BRACE_FORCE" value="3" />
+    </codeStyleSettings>
+  </code_scheme>
+</component>
